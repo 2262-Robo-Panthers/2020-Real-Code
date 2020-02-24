@@ -83,7 +83,7 @@ public class Robot extends TimedRobot {
 	int ballsCounter = 3;
 	boolean intakeWantConveyor;
 	double minVel;
-	boolean driveOn;
+	boolean driveOn = true;
 	boolean autoAlignEnabled;
 	static final double flywheelMinSpeed = 0.35;
 
@@ -95,9 +95,10 @@ public class Robot extends TimedRobot {
 	 * B = Flywheel Off
 	 * X = Intake Roller On
 	 * Y = Intake Roller Off
-	 * dPad Up = Climb Up
-	 * dPad Left = Close Shot
-	 * dPad Right = Far Shot
+	 * D-Pad Up = Auto Align
+	 * D-Pad Down = Climb Up
+	 * D-Pad Left = Close Shot
+	 * D-Pad Right = Far Shot
 	 * Start = Climb Piston Extend
 	 * Back = Climb Piston Retract
 	 */
@@ -168,14 +169,10 @@ public class Robot extends TimedRobot {
 
 		// if (dPad == 0) driveOn = !driveOn;
 
-		remote.setRumble(RumbleType.kLeftRumble, flywheelGetVel / 5000);
-		remote.setRumble(RumbleType.kRightRumble, flywheelGetVel / 5000);
-
 		remote.setRumble(RumbleType.kLeftRumble, flywheelGetVel / 4700);
 		remote.setRumble(RumbleType.kRightRumble, flywheelGetVel / 4700);
-		if (driveOn == true) {
-			drive.arcadeDrive(remote.getY(Hand.kLeft), -remote.getX(Hand.kLeft));
-		}
+
+		if (driveOn) drive.arcadeDrive(remote.getY(Hand.kLeft), -remote.getX(Hand.kLeft));
 
 		if (remote.getStartButtonPressed()) {
 			climbPiston.set(true);
