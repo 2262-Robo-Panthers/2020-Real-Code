@@ -3,7 +3,6 @@ package frc.robot;
 import com.analog.adis16448.frc.ADIS16448_IMU;
 import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonFX;
-//import com.ctre.phoenix.motorcontrol.TalonFXControlMode;
 import com.ctre.phoenix.motorcontrol.can.WPI_VictorSPX;
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.CANSparkMax.IdleMode;
@@ -135,8 +134,6 @@ public class Robot extends TimedRobot {
 
 	@Override
 	public void autonomousInit() {
-		// fr.set(TalonFXControlMode.Position, 200000.0);
-		// fl.set(TalonFXControlMode.Position, 200000.0);
 		autoTimer.start();
 	}
 
@@ -174,7 +171,11 @@ public class Robot extends TimedRobot {
 		remote.setRumble(RumbleType.kLeftRumble, flywheelGetVel / 5000);
 		remote.setRumble(RumbleType.kRightRumble, flywheelGetVel / 5000);
 
-		drive.arcadeDrive(remote.getY(Hand.kLeft), -remote.getX(Hand.kLeft));
+		remote.setRumble(RumbleType.kLeftRumble, flywheelGetVel / 4700);
+		remote.setRumble(RumbleType.kRightRumble, flywheelGetVel / 4700);
+		if (driveOn == true) {
+			drive.arcadeDrive(remote.getY(Hand.kLeft), -remote.getX(Hand.kLeft));
+		}
 
 		if (remote.getStartButtonPressed()) {
 			climbPiston.set(true);
