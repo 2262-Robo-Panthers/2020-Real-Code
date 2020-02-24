@@ -7,7 +7,6 @@ import com.ctre.phoenix.music.Orchestra;
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.CANSparkMax.IdleMode;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
-
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DigitalOutput;
@@ -151,12 +150,13 @@ public class Robot extends TimedRobot {
 			shooting = false;
 		}
 
-		// if (dPad == 0) driveOn = driveOn ? false : true;
+		if (dPad == 0) driveOn = driveOn ? false : true;
 
-		remote.setRumble(RumbleType.kLeftRumble, flywheelGetVel / 5000);
-		remote.setRumble(RumbleType.kRightRumble, flywheelGetVel / 5000);
-
-		drive.arcadeDrive(remote.getY(Hand.kLeft), -remote.getX(Hand.kLeft));
+		remote.setRumble(RumbleType.kLeftRumble, flywheelGetVel / 4700);
+		remote.setRumble(RumbleType.kRightRumble, flywheelGetVel / 4700);
+		if (driveOn == true) {
+			drive.arcadeDrive(remote.getY(Hand.kLeft), -remote.getX(Hand.kLeft));
+		}
 
 		if (remote.getStartButtonPressed()) {
 			climbPiston.set(true);
