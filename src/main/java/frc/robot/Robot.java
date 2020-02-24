@@ -2,7 +2,6 @@ package frc.robot;
 
 import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonFX;
-//import com.ctre.phoenix.motorcontrol.TalonFXControlMode;
 import com.ctre.phoenix.motorcontrol.can.WPI_VictorSPX;
 import com.ctre.phoenix.music.Orchestra;
 import com.revrobotics.CANSparkMax;
@@ -119,8 +118,6 @@ public class Robot extends TimedRobot {
 
 	@Override
 	public void autonomousInit() {
-		// fr.set(TalonFXControlMode.Position, 200000.0);
-		// fl.set(TalonFXControlMode.Position, 200000.0);
 		autoTimer.start();
 	}
 
