@@ -1,14 +1,17 @@
 package frc.robot;
 
+import com.analog.adis16448.frc.ADIS16448_IMU;
 import com.ctre.phoenix.motorcontrol.NeutralMode;
 import com.ctre.phoenix.motorcontrol.can.WPI_TalonFX;
 //import com.ctre.phoenix.motorcontrol.TalonFXControlMode;
 import com.ctre.phoenix.motorcontrol.can.WPI_VictorSPX;
-import com.ctre.phoenix.music.Orchestra;
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.CANSparkMax.IdleMode;
 import com.revrobotics.CANSparkMaxLowLevel.MotorType;
 
+import edu.wpi.first.networktables.NetworkTable;
+import edu.wpi.first.networktables.NetworkTableEntry;
+import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.DigitalInput;
 import edu.wpi.first.wpilibj.DigitalOutput;
@@ -17,6 +20,7 @@ import edu.wpi.first.wpilibj.DoubleSolenoid.Value;
 import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.GenericHID.Hand;
 import edu.wpi.first.wpilibj.GenericHID.RumbleType;
+import edu.wpi.first.wpilibj.controller.PIDController;
 import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.Solenoid;
 import edu.wpi.first.wpilibj.Spark;
@@ -24,14 +28,18 @@ import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.drive.DifferentialDrive;
+import edu.wpi.first.wpilibj.geometry.Pose2d;
+import edu.wpi.first.wpilibj.geometry.Rotation2d;
+import edu.wpi.first.wpilibj.geometry.Translation2d;
+import edu.wpi.first.wpilibj.interfaces.Gyro;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 public class Robot extends TimedRobot {
-	DifferentialDrive drive;
 	final WPI_TalonFX br = new WPI_TalonFX(0);
 	final WPI_TalonFX fr = new WPI_TalonFX(1);
 	final WPI_TalonFX bl = new WPI_TalonFX(2);
 	final WPI_TalonFX fl = new WPI_TalonFX(3);
+	final DifferentialDrive drive = new DifferentialDrive(fl, fr);
 
 	final CANSparkMax climb = new CANSparkMax(8, MotorType.kBrushed);
 	final WPI_VictorSPX hood = new WPI_VictorSPX(5);
@@ -47,8 +55,9 @@ public class Robot extends TimedRobot {
 	final Solenoid climbPiston = new Solenoid(9, 4);
 
 	final XboxController remote = new XboxController(0);
-	final Orchestra song = new Orchestra();
 	final Joystick driveStick = new Joystick(0);
+
+	final Gyro gyro = new ADIS16448_IMU();
 
 	final DigitalInput frontPhotoGate = new DigitalInput(0);
 	final DigitalInput upperPhotoGate = new DigitalInput(1);
@@ -58,21 +67,25 @@ public class Robot extends TimedRobot {
 	final DigitalInput climbLimit = new DigitalInput(6);
 	final DigitalOutput lightRing = new DigitalOutput(9);
 
+	NetworkTableEntry poseEntry;
+	final PIDController autoAlignPID = new PIDController(0.01, 0, 0);
+
 	final Timer autoTimer = new Timer();
 	final Timer intakerConveyor = new Timer();
 
 	boolean flywheelSpin;
-	double flywheelSpeed;
+	double flywheelSpeed = 0.5;
 	boolean rollerON;
 	boolean climberPiston;
 	boolean Neo550SpinCity;
 	boolean conveyorStarted;
 	boolean shooting;
 	boolean sawIt;
-	int ballsCounter;
+	int ballsCounter = 3;
 	boolean intakeWantConveyor;
 	double minVel;
 	boolean driveOn;
+	boolean autoAlignEnabled;
 	static final double flywheelMinSpeed = 0.35;
 
 	/*
@@ -96,22 +109,25 @@ public class Robot extends TimedRobot {
 		fr.setNeutralMode(NeutralMode.Coast);
 		fl.setNeutralMode(NeutralMode.Coast);
 		bl.setNeutralMode(NeutralMode.Coast);
-		fr.configOpenloopRamp(0.5);
-		fl.configOpenloopRamp(0.5);
-		climberPiston = false;
-		flywheelSpin = false;
-		flywheelSpeed = 0.5;
-		flywheel.setInverted(true);
-		air.start();
 		br.follow(fr);
 		bl.follow(fl);
-		drive = new DifferentialDrive(fl, fr);
+		fr.configOpenloopRamp(0.5);
+		fl.configOpenloopRamp(0.5);
+
+		flywheel.setInverted(true);
 		flywheel.getEncoder().setPosition(0);
-		Neo550SpinCity = false;
+		flywheel.setIdleMode(IdleMode.kCoast);
+
+		air.start();
 		intake.setNeutralMode(NeutralMode.Brake);
 		climb.setIdleMode(IdleMode.kBrake);
-		flywheel.setIdleMode(IdleMode.kCoast);
 		stopper.set(Value.kReverse);
+
+		final NetworkTableInstance inst = NetworkTableInstance.getDefault();
+		final NetworkTable table = inst.getTable("chameleon-vision/Microsoft_LifeCam_HD_3000");
+		poseEntry = table.getEntry("targetPose");
+
+		autoAlignPID.setSetpoint(0);
 	}
 
 	public void robotPeriodic() {
@@ -129,32 +145,31 @@ public class Robot extends TimedRobot {
 		drive.arcadeDrive(autoTimer.get() <= 1.5 ? 0.75 : 0, 0);
 	}
 
-	public void manualDrive(double move, double turn) {
-	}
-
 	@Override
 	public void teleopInit() {
-		ballsCounter = 3;
-		flywheel.getEncoder().setPosition(0);
-		Neo550SpinCity = false;
-		conveyorStarted = false;
-		shooting = false;
-		rollerON = false;
 	}
 
 	@Override
 	public void teleopPeriodic() {
 
+		final int dPad = remote.getPOV(0);
+		final double flywheelGetVel = flywheel.getEncoder().getVelocity();
 		boolean conveyorRequested = false;
-		int dPad = remote.getPOV(0);
-		double flywheelGetVel = flywheel.getEncoder().getVelocity();
+
+		final Translation2d targetTranslation = getTargetPose().getTranslation();
+		final double targetAngle = Math.atan2(targetTranslation.getY(), targetTranslation.getX());
+		if (dPad == 0) autoAlignEnabled = !autoAlignEnabled;
+		if (autoAlignEnabled) {
+			fl.setVoltage(autoAlignPID.calculate(targetAngle));
+			fr.setVoltage(-autoAlignPID.calculate(targetAngle));
+		}
 
 		if (flywheel.get() == 0 && shooting) {
 			ConveyorStop();
 			shooting = false;
 		}
 
-		// if (dPad == 0) driveOn = driveOn ? false : true;
+		// if (dPad == 0) driveOn = !driveOn;
 
 		remote.setRumble(RumbleType.kLeftRumble, flywheelGetVel / 5000);
 		remote.setRumble(RumbleType.kRightRumble, flywheelGetVel / 5000);
@@ -262,27 +277,33 @@ public class Robot extends TimedRobot {
 		SmartDashboard.putBoolean("High Gear", shift.get());
 		SmartDashboard.putNumber("Lift Current", climb.getOutputCurrent());
 		SmartDashboard.putBoolean("Drive On?", driveOn);
-	}
-
-	public void ConveyorStart() {
-		conveyor1.set(-1);
-		conveyor2.set(1);
-	}
-
-	public void ConveyorStop() {
-		conveyor1.set(0);
-		conveyor2.set(0);
-	}
-
-	public void BallCounterUp() {
-		if (ballsCounter < 5) ++ballsCounter;
-	}
-
-	public void BallCounterDown() {
-		if (ballsCounter > 0) --ballsCounter;
+		SmartDashboard.putNumberArray("Target Pose", poseEntry.getDoubleArray(new double[3]));
 	}
 
 	@Override
 	public void testPeriodic() {
+	}
+
+	private void ConveyorStart() {
+		conveyor1.set(-1);
+		conveyor2.set(1);
+	}
+
+	private void ConveyorStop() {
+		conveyor1.set(0);
+		conveyor2.set(0);
+	}
+
+	private void BallCounterUp() {
+		if (ballsCounter < 5) ++ballsCounter;
+	}
+
+	private void BallCounterDown() {
+		if (ballsCounter > 0) --ballsCounter;
+	}
+
+	private Pose2d getTargetPose() {
+		double[] poseArray = poseEntry.getDoubleArray(new double[3]);
+		return new Pose2d(poseArray[0], poseArray[1], Rotation2d.fromDegrees(poseArray[2]));
 	}
 }
