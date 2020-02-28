@@ -63,11 +63,13 @@ public class Robot extends TimedRobot {
 	final DigitalInput climbLimit = new DigitalInput(6);
 	final DigitalOutput lightRing = new DigitalOutput(9);
 
+	NetworkTableEntry targetInViewEntry;
 	NetworkTableEntry poseEntry;
-	final PIDController autoAlignPID = new PIDController(0.01, 0, 0);
+	final PIDController autoAlignPID = new PIDController(1, 0, 0);
 
 	final Timer autoTimer = new Timer();
-	// final Timer intakerConveyor = new Timer();
+	final Timer initiationLineTimer = new Timer();
+	final Timer intakerConveyor = new Timer();
 
 	boolean flywheelSpin;
 	double flywheelSpeed = 0.5;
@@ -82,7 +84,9 @@ public class Robot extends TimedRobot {
 	double minVel;
 	boolean driveOn = true;
 	boolean autoAlignEnabled;
-	static final double flywheelMinSpeed = 0.35;
+	boolean targetInView;
+	boolean inPosition;
+	static final double flywheelMinSpeed = 0.45;
 
 	/*
 	 * Left Joystick = Drive
@@ -121,7 +125,8 @@ public class Robot extends TimedRobot {
 		stopper.set(Value.kReverse);
 
 		final NetworkTableInstance inst = NetworkTableInstance.getDefault();
-		final NetworkTable table = inst.getTable("chameleon-vision").getSubTable("Microsoft LifeCam HD 3000");
+		final NetworkTable table = inst.getTable("chameleon-vision").getSubTable("Microsoft LifeCam HD-3000");
+		targetInViewEntry = table.getEntry("isValid");
 		poseEntry = table.getEntry("targetPose");
 
 		autoAlignPID.setSetpoint(0);
@@ -132,17 +137,42 @@ public class Robot extends TimedRobot {
 
 	@Override
 	public void autonomousInit() {
-		autoTimer.start();
+		targetInView = false;
+		initiationLineTimer.start();
+		initiationLineTimer.reset();
 	}
 
 	@Override
 	public void autonomousPeriodic() {
-		drive.arcadeDrive(autoTimer.get() <= 1.5 ? 0.75 : 0, 0);
+		boolean conveyorRequested = false;
+
+		if (initiationLineTimer.get() < 1.5) drive.arcadeDrive(0.5, 0);
+		else {
+			if (getTargetInView()) {
+				drive.arcadeDrive(-0.5, 0);
+			}
+			else if (targetInView) {
+				inPosition = true;
+				autoTimer.start();
+				autoTimer.reset();
+			}
+			conveyorRequested = inPosition && autoTimer.get() < 3.0;
+
+			if (conveyorRequested) ConveyorStart();
+			else ConveyorStop();
+		}
+
+		flywheel.set(autoTimer.get() < 3.0 ? 0.4 : 0);
+
+		SmartDashboard.putBoolean("Target In View", targetInView);
+		targetInView = getTargetInView();
 	}
 
 	@Override
 	public void teleopInit() {
 		flywheel.getEncoder().setPosition(0);
+		flywheel.set(0);
+		flywheelSpin = false;
 		Neo550SpinCity = false;
 		conveyorStarted = false;
 		shooting = false;
@@ -159,7 +189,7 @@ public class Robot extends TimedRobot {
 		boolean conveyorRequested = false;
 
 		final Translation2d targetTranslation = getTargetPose().getTranslation();
-		final double targetAngle = Math.atan2(targetTranslation.getY(), targetTranslation.getX());
+		final double targetAngle = -Math.atan2(targetTranslation.getY(), targetTranslation.getX());
 		if (dPad == 0) autoAlignEnabled = !autoAlignEnabled;
 		if (autoAlignEnabled) {
 			fl.setVoltage(autoAlignPID.calculate(targetAngle));
@@ -221,25 +251,24 @@ public class Robot extends TimedRobot {
 		if (otherPhotoGate.get()) intakeWantConveyor = false;
 		if (frontPhotoGate.get()) {
 			intakeWantConveyor = true;
-			// intakerConveyor.reset();
-			// intakerConveyor.start();
+			intakerConveyor.reset();
+			intakerConveyor.start();
 			BallCounterUp();
 		}
-		// if (intakerConveyor.get() >= 0.2) intakeWantConveyor = false;
+		if (intakerConveyor.get() >= 1) intakeWantConveyor = false;
 
 		if (remote.getAButtonPressed() && flywheelGetVel > minVel && !shooting) {
-			// intakerConveyor.stop();
-			// intakerConveyor.reset();
+			intakerConveyor.stop();
+			intakerConveyor.reset();
 			shooting = true;
 			BallCounterDown();
 		}
 		if (shooting) {
 			if (upperPhotoGate.get()) {
-				ConveyorStart();
+				conveyorRequested = true;
 				sawIt = true;
 			}
 			else if (sawIt) {
-				ConveyorStop();
 				shooting = false;
 				sawIt = false;
 			}
@@ -258,7 +287,7 @@ public class Robot extends TimedRobot {
 		roller.set(rollerON ? -0.4 : 0);
 
 		SmartDashboard.putNumber("RPM", flywheelGetVel);
-		SmartDashboard.putBoolean("FlyWheel Running", flywheelSpin);
+		SmartDashboard.putBoolean("Flywheel Running", flywheelSpin);
 		SmartDashboard.putNumber("Flywheel Speed", flywheelSpeed);
 		SmartDashboard.putBoolean("Stopper Engaged", stopper.get() == Value.kReverse);
 		SmartDashboard.putBoolean("Conveyor Running", conveyor1.get() != 0);
@@ -268,7 +297,7 @@ public class Robot extends TimedRobot {
 		SmartDashboard.putBoolean("LowPhotoGate", frontPhotoGate.get());
 		SmartDashboard.putBoolean("HighPhotoGate", upperPhotoGate.get());
 		SmartDashboard.putNumber("Balls In", ballsCounter);
-		// SmartDashboard.putNumber("Timer", intakerConveyor.get());
+		SmartDashboard.putNumber("Timer", intakerConveyor.get());
 		SmartDashboard.putNumber("hood Encoder", hoodEncoder.getDistance());
 		SmartDashboard.putNumber("NEO Temp", flywheel.getMotorTemperature());
 		SmartDashboard.putNumber("Neo Current", flywheel.getOutputCurrent());
@@ -306,5 +335,9 @@ public class Robot extends TimedRobot {
 	private Pose2d getTargetPose() {
 		double[] poseArray = poseEntry.getDoubleArray(new double[3]);
 		return new Pose2d(poseArray[0], poseArray[1], Rotation2d.fromDegrees(poseArray[2]));
+	}
+
+	private boolean getTargetInView() {
+		return targetInViewEntry.getBoolean(false);
 	}
 }
