@@ -86,7 +86,9 @@ public class Robot extends TimedRobot {
 	boolean autoAlignEnabled;
 	boolean targetInView;
 	boolean inPosition;
-	static final double flywheelMinSpeed = 0.45;
+	boolean intaking;
+	boolean intakingParty;
+	static final double flywheelMinSpeed = 0.2;
 
 	/*
 	 * Left Joystick = Drive
@@ -158,8 +160,8 @@ public class Robot extends TimedRobot {
 			}
 			conveyorRequested = inPosition && autoTimer.get() < 3.0;
 
-			if (conveyorRequested) ConveyorStart();
-			else ConveyorStop();
+			//if (conveyorRequested) ConveyorStart();
+			//else ConveyorStop();
 		}
 
 		flywheel.set(autoTimer.get() < 3.0 ? 0.4 : 0);
@@ -179,6 +181,7 @@ public class Robot extends TimedRobot {
 		rollerON = false;
 		autoAlignEnabled = false;
 		intakeWantConveyor = false;
+		intakingParty = false;
 	}
 
 	@Override
@@ -247,15 +250,15 @@ public class Robot extends TimedRobot {
 		flywheelSpin = flywheel.get() != 0;
 
 		climb.set(dPad == 180 && climbLimit.get() ? -0.5 : 0);
-
-		if (otherPhotoGate.get()) intakeWantConveyor = false;
-		if (frontPhotoGate.get()) {
+		/*
+		if (otherPhotoGate.get() == true) intakeWantConveyor = false;
+		if (frontPhotoGate.get() == true) {
 			intakeWantConveyor = true;
 			intakerConveyor.reset();
 			intakerConveyor.start();
 			BallCounterUp();
 		}
-		if (intakerConveyor.get() >= 1) intakeWantConveyor = false;
+		//if (intakerConveyor.get() >= 1) intakeWantConveyor = false;
 
 		if (remote.getAButtonPressed() && flywheelGetVel > minVel && !shooting) {
 			intakerConveyor.stop();
@@ -276,12 +279,49 @@ public class Robot extends TimedRobot {
 
 		conveyorRequested = intakeWantConveyor || shooting;
 
-		hood.set(-remote.getY(Hand.kRight));
-
-		if (conveyorRequested) ConveyorStart();
+		if (conveyorRequested== true) ConveyorStall();
+		//if (conveyorRequested== true && intakeWantConveyor == false) ConveyorStart();
 		else ConveyorStop();
+		*/
+
+		/*
+		if (frontPhotoGate.get() == true) {
+			ConveyorIntake();
+			intaking = true;
+		}
+		if (frontPhotoGate.get() == false && intaking == true && otherPhotoGate.get() == false) {
+			intaking = false;
+			ConveyorGo();
+		}
+		if (otherPhotoGate.get() == true && intaking == false) {
+			ConveyorStop();
+		}
+		*/
+
+		if (frontPhotoGate.get() == true) {
+			intakingParty = true;
+		}
+		if (intakingParty == true) {
+			Intaking();
+		}
+
+		if (flywheel.getEncoder().getVelocity() > 500 && remote.getAButtonPressed()) {
+			ConveyorGo();
+			shooting = true;
+		}
+		if (shooting == true && upperPhotoGate.get() == true) {
+			sawIt = true;
+		}
+		if (upperPhotoGate.get() == false && shooting == true && sawIt == true) {
+			ConveyorStop();
+			shooting = false;
+			sawIt = false;
+		}
 
 		// stopper.set(shooting ? Value.kReverse : Value.kForward);
+
+
+		hood.set(-remote.getY(Hand.kRight));
 		if (remote.getYButtonPressed()) rollerON = false;
 		if (remote.getXButtonPressed()) rollerON = true;
 		roller.set(rollerON ? -0.4 : 0);
@@ -314,7 +354,22 @@ public class Robot extends TimedRobot {
 	public void testPeriodic() {
 	}
 
-	private void ConveyorStart() {
+
+	private void Intaking() {
+		if (frontPhotoGate.get() == true) {
+			ConveyorIntake();
+			intaking = true;
+		}
+		if (frontPhotoGate.get() == false && intaking == true && otherPhotoGate.get() == false) {
+			intaking = false;
+			ConveyorGo();
+		}
+		if (otherPhotoGate.get() == true && intaking == false) {
+			ConveyorStop();
+			intakingParty = false;
+		}
+	}
+	private void ConveyorGo() {
 		conveyor1.set(-1);
 		conveyor2.set(1);
 	}
@@ -324,12 +379,9 @@ public class Robot extends TimedRobot {
 		conveyor2.set(0);
 	}
 
-	private void BallCounterUp() {
-		if (ballsCounter < 5) ++ballsCounter;
-	}
-
-	private void BallCounterDown() {
-		if (ballsCounter > 0) --ballsCounter;
+	private void ConveyorIntake() {
+		conveyor1.set(-1);
+		conveyor2.set(-0.8);
 	}
 
 	private Pose2d getTargetPose() {
