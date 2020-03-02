@@ -175,7 +175,7 @@ public class Robot extends TimedRobot {
 		initiationLineTimer.reset();
         	// flywheelSetpoint = 1;
         	flywheel.set(0.4);
-		stopper.set(Value.kReverse);
+		stopper.set(Value.kForward);
 	}
 
 	@Override
