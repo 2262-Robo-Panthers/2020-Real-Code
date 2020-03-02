@@ -173,8 +173,9 @@ public class Robot extends TimedRobot {
 		targetInView = false;
 		initiationLineTimer.start();
 		initiationLineTimer.reset();
-        // flywheelSetpoint = 1;
-        flywheel.set(0.4);
+        	// flywheelSetpoint = 1;
+        	flywheel.set(0.4);
+		stopper.set(Value.kReverse);
 	}
 
 	@Override
